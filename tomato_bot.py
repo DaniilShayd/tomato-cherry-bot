@@ -9,6 +9,7 @@ from telegram.ext import (
     CommandHandler,
     ContextTypes,
     ApplicationBuilder,
+    HTTPXRequest,
 )
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -39,7 +40,6 @@ def save_users(users: dict):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = str(update.effective_chat.id)
     users = load_users()
-
     if chat_id in users:
         planting_date = users[chat_id]["planting_date"]
         await update.message.reply_text(
@@ -49,7 +49,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"Используйте /status, чтобы проверить состояние."
         )
         return
-
     today_dt = datetime.now()
     today_str = today_dt.strftime("%d.%m.%Y")
     users[chat_id] = {
@@ -57,7 +56,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "planting_datetime": today_dt.isoformat(),
     }
     save_users(users)
-
     await update.message.reply_text(
         f"🍅 *Привет! Я помогу вырастить ваши черри!*\n\n"
         f"📅 Дата посадки: {today_str}\n\n"
@@ -75,22 +73,18 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = str(update.effective_chat.id)
     users = load_users()
-
     if chat_id not in users:
         await update.message.reply_text("❌ Вы еще не начали. Введите /start!")
         return
-
     planting_dt = datetime.fromisoformat(users[chat_id]["planting_datetime"])
     days_passed = (datetime.now() - planting_dt).days
     planting_date = users[chat_id]["planting_date"]
-
     if days_passed < 7:
         sprout_status = f"⏳ Еще {7 - days_passed} дн. до всходов (обычно 7–10 дней)."
     elif days_passed <= 10:
         sprout_status = "👀 Самое время проверить ростки!"
     else:
         sprout_status = "🌿 Ростки уже должны быть! Следите за светом."
-
     await update.message.reply_text(
         f"📊 *Статус рассады*\n\n"
         f"📅 Посажено: {planting_date}\n"
@@ -129,7 +123,6 @@ async def send_sprout_check_reminder(application: Application, chat_id: str, day
 
 async def post_init(application: Application):
     scheduler = AsyncIOScheduler()
-    
     scheduler.add_job(
         send_daily_watering_reminder,
         trigger=CronTrigger(hour=12, minute=0),
@@ -137,7 +130,6 @@ async def post_init(application: Application):
         id="daily_watering",
         replace_existing=True
     )
-
     users = load_users()
     for chat_id, data in users.items():
         planting_dt = datetime.fromisoformat(data["planting_datetime"])
@@ -151,11 +143,18 @@ async def post_init(application: Application):
                     id=f"sprout_{chat_id}_{day}",
                     replace_existing=True
                 )
-    
     scheduler.start()
 
 def main():
-    application = ApplicationBuilder().token(BOT_TOKEN).post_init(post_init).build()
+    request_config = HTTPXRequest(connect_timeout=30.0, read_timeout=30.0)
+
+    application = (
+        ApplicationBuilder()
+        .token(BOT_TOKEN)
+        .request(request_config)
+        .post_init(post_init)
+        .build()
+    )
 
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("status", status))
