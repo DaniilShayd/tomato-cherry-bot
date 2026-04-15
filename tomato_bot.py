@@ -4,12 +4,12 @@ import os
 import asyncio
 from datetime import datetime, timedelta
 from telegram import Update
+from telegram.request import HTTPXRequest
 from telegram.ext import (
     Application,
     CommandHandler,
     ContextTypes,
     ApplicationBuilder,
-    HTTPXRequest,
 )
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
